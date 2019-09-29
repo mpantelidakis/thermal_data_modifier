@@ -65,6 +65,14 @@ class ThermalDataModifier:
 
             for row in reader:
                 if not it.finished:
+                    # check if the csv has been modified before
+                    if (len(row)-1) >=6:
+                        if self.is_debug:
+                            print('')
+                            print('DEBUG csv already contains class information and will not be modified')
+                            print('output.csv file recreated')
+                            print('')
+                        return
                     if it[0] != 0:
                         row.append('Leaf')
                     else:
@@ -104,7 +112,7 @@ class ThermalDataModifier:
                 temp_value = float(row[2])
                 total_counter += 1
                 total_image_temp += temp_value
-                if row[3] == 'Leaf':
+                if row[6] == 'Leaf':
                     leaf_counter += 1
                     total_leaf_temp += temp_value
                     if temp_value > highest_leaf_temp:

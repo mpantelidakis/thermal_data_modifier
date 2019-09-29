@@ -15,6 +15,7 @@ from PIL import Image
 from math import sqrt, exp, log
 from matplotlib import cm
 from matplotlib import pyplot as plt
+from itertools import zip_longest
 
 import numpy as np
 import cv2 as cv
@@ -39,6 +40,7 @@ class FlirImageExtractor:
         self.fix_endian = True
 
         self.rgb_image_np = None
+        self.downscaled_rgb_image_np = None
         self.thermal_image_np = None
 
     pass
@@ -119,7 +121,7 @@ class FlirImageExtractor:
              '-ReflectedApparentTemperature', '-IRWindowTemperature', '-IRWindowTransmission', '-RelativeHumidity',
              '-PlanckR1', '-PlanckB', '-PlanckF', '-PlanckO', '-PlanckR2', '-j'])
         meta = json.loads(meta_json.decode())[0]
-
+        
         # exifread can't extract the embedded thermal image, use exiftool instead
         thermal_img_bytes = subprocess.check_output([self.exiftool_path, "-RawThermalImage", "-b", self.flir_img_filename])
         thermal_img_stream = io.BytesIO(thermal_img_bytes)
@@ -248,26 +250,48 @@ class FlirImageExtractor:
         img_visual.save(image_filename)
         img_thermal.save(thermal_filename)
 
-    def export_thermal_to_csv(self):
+    def export_data_to_csv(self):
         """
-        Convert thermal data in numpy to json
+        Export thermal data, along with rgb information 
+        of the downscaled image to a csv file
         :return:
         """
-
+        
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
         path = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[1] + self.csv_suffix)
 
+
+        # list of pixel coordinates and thermal values
+        coords_and_thermal_values = []
+        for e in np.ndenumerate(self.thermal_image_np):
+            x, y = e[0]
+            c = e[1]
+            coords_and_thermal_values.append([x, y, c])
+    
+        # list of rgb values of the downscaled 60x80 image
+        rgb_values = []
+        for i in range(self.downscaled_rgb_image_np.shape[0]):
+            for j in range(self.downscaled_rgb_image_np.shape[1]):
+                R = self.downscaled_rgb_image_np[i,j,0]
+                G = self.downscaled_rgb_image_np[i,j,1]
+                B = self.downscaled_rgb_image_np[i,j,2]
+                rgb_values.append([R, G, B])
+        
+        # List of lists of lists [[[x,y,temp],[R,G,B]]]
+        merged_list = list(map(list,zip(coords_and_thermal_values, rgb_values)))
+        
+        # List of lists [[x,y,temp],[R,G,B]]
+        flat_list = [item for sublist in merged_list for item in sublist]
+
+        # Combination of consecutive sublists [x,y,temp,R,G,B] -> format needed for csv writer
+        x = iter(flat_list)
+        formatted_flat_list = [a+b for a, b in zip_longest(x, x, fillvalue=[])]
+        
         with open(path, 'w') as fh:
             writer = csv.writer(fh, delimiter=',')
-            writer.writerow(['x', 'y', 'temp (c)'])
-
-            pixel_values = []
-            for e in np.ndenumerate(self.thermal_image_np):
-                x, y = e[0]
-                c = e[1]
-                pixel_values.append([x, y, c])
-
-            writer.writerows(pixel_values)
+            writer.writerow(['x', 'y', 'Temp(c)', 'R', 'G', 'B'])
+            writer.writerows(formatted_flat_list)
+            
 
     def crop_center(self, img, cropx, cropy):
         """
@@ -301,6 +325,7 @@ class FlirImageExtractor:
         downscaled_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[1] + self.downscaled_image_suffix)
 
         downscaled_img_visual = Image.fromarray(resized)
+        self.downscaled_rgb_image_np = np.array(downscaled_img_visual)
         downscaled_img_visual.save(downscaled_image_filename)
 
         if self.is_debug:
@@ -311,6 +336,11 @@ class FlirImageExtractor:
             print("DEBUG Saving downscaled RGB image to:{}".format(downscaled_image_filename))
 
     def create_subfolder(self):
+        """
+        Create a subfolder inside the original image
+        folder in order to save generated files
+        :return:
+        """
         # define the name of the directory to be created
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
         path = fn_prefix
@@ -333,7 +363,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--plot', help='Generate a plot using matplotlib', required=False, action='store_true')
     parser.add_argument('-exif', '--exiftool', type=str, help='Custom path to exiftool', required=False,
                         default='exiftool')
-    parser.add_argument('-csv', '--extractcsv', help='Export the thermal data per pixel encoded as csv file',
+    parser.add_argument('-csv', '--extractcsv', help='Export the data per pixel encoded as csv file',
                         required=False, action='store_true')
     parser.add_argument('-s', '--scale', help='Downscale the original image to match the thermal image\'s dimensions',
                         required=False, action='store_true')
@@ -353,7 +383,6 @@ if __name__ == '__main__':
         fie.image_downscale()
 
     if args.extractcsv:
-        # fie.export_thermal_to_csv(args.extractcsv)
-        fie.export_thermal_to_csv()
+        fie.export_data_to_csv()
 
     fie.save_images()
