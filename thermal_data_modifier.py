@@ -5,6 +5,7 @@ import glob
 
 import csv
 import numpy as np
+import cv2 as cv
 
 
 # -*- coding: utf-8 -*-
@@ -33,9 +34,12 @@ class ThermalDataModifier:
 
         if os.path.exists(os.path.join(self.directory + 'mask.txt')):
             mask = np.loadtxt(os.path.join(self.directory + 'mask.txt'))
-            it = np.nditer(mask, flags=['multi_index'])
+            new_mask = cv.resize(mask, dsize=(80, 60), interpolation=cv.INTER_CUBIC)
+            np.savetxt(os.path.join(self.directory + 'mask_60x80.txt'),new_mask, fmt='%d')
+            it = np.nditer(new_mask, flags=['multi_index'])
             if self.is_debug:
                 print('DEBUG Mask successfully loaded!')
+                print('DEBUG Mask was downscaled to 60x80!')
         else:
             print("Mask not found! Please add a mask.txt file to the folder")
             exit()
@@ -53,7 +57,7 @@ class ThermalDataModifier:
         if self.is_debug:
             print("DEBUG Using csv file: " + loaded_csv_files[0])
 
-        # Create another csv containing class information
+        #Create another csv containing class information
         with open(loaded_csv_files[0], 'r') as csvInput:
 
             reader = csv.reader(csvInput)
@@ -65,7 +69,7 @@ class ThermalDataModifier:
 
             for row in reader:
                 if not it.finished:
-                    # check if the csv has been modified before
+                    #check if the csv has been modified before
                     if (len(row)-1) >=6:
                         if self.is_debug:
                             print('')

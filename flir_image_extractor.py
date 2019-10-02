@@ -31,6 +31,7 @@ class FlirImageExtractor:
         self.image_suffix = "_rgb_image.jpg"
         self.thumbnail_suffix = "_rgb_thumb.jpg"
         self.downscaled_image_suffix = "_rgb_image_downscaled.jpg"
+        self.cropped_image_suffix = "_rgb_image_cropped.jpg"
         self.thermal_suffix = "_thermal.png"
         self.csv_suffix = "_thermal_values.csv"
         self.default_distance = 1.0
@@ -312,7 +313,7 @@ class FlirImageExtractor:
         """
 
         # crop the rgb image
-        cropped_img = self.crop_center(self.rgb_image_np, 508, 344)
+        cropped_img = self.crop_center(self.rgb_image_np, 508, 343)
 
         width = 80
         height = 60
@@ -323,17 +324,23 @@ class FlirImageExtractor:
 
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
         downscaled_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[1] + self.downscaled_image_suffix)
+        cropped_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[1] + self.cropped_image_suffix)
 
         downscaled_img_visual = Image.fromarray(resized)
         self.downscaled_rgb_image_np = np.array(downscaled_img_visual)
+        
+        cropped_img_visual = Image.fromarray(cropped_img)
+        
         downscaled_img_visual.save(downscaled_image_filename)
-
+        cropped_img_visual.save(cropped_image_filename)
+        
         if self.is_debug:
             print('DEBUG Original Dimensions : ', self.rgb_image_np.shape)
             print('DEBUG Removed black surrounding box')
             print('DEBUG New dimensions: ', cropped_img.shape)
             print('DEBUG Resized Dimensions : ', resized.shape)
             print("DEBUG Saving downscaled RGB image to:{}".format(downscaled_image_filename))
+            print("DEBUG Saving cropped 508x343 RGB image to:{}".format(cropped_image_filename))
 
     def create_subfolder(self):
         """
