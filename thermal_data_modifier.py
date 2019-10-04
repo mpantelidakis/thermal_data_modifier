@@ -41,7 +41,7 @@ class ThermalDataModifier:
                 print('DEBUG Mask successfully loaded!')
                 print('DEBUG Mask was downscaled to 60x80!')
         else:
-            print("Mask not found! Please add a mask.txt file to the folder")
+            print("Mask not found! Please add a mask.txt file to the following folder: "+ self.directory)
             exit()
 
         os.chdir(self.directory)
@@ -49,8 +49,10 @@ class ThermalDataModifier:
         loaded_csv_files = glob.glob('*{}'.format(unmodified_data_suffix))
 
         if loaded_csv_files.__len__() != 1:
-            print('Multiple or no themal values csv files found inside the folder:')
+            print('Multiple or no themal values csv files found inside the folder: ' + self.directory)
             print(loaded_csv_files)
+            print('Please provide a .csv file to the folder or remove duplicate files')
+            print('Exiting..')
             exit()
 
         if self.is_debug:
