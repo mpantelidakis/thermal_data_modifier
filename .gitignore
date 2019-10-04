@@ -124,8 +124,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-images/
-!images/**/
 images/camera_1/*
 images/camera_2/*
 images/camera_3/*

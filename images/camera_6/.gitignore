@@ -1,0 +1,4 @@
+# Ignore everything in this directory, workaround to create empty folder
+*
+# Except this file
+!.gitignore
