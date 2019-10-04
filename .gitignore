@@ -125,4 +125,10 @@ dmypy.json
 .pyre/
 
 
-images/*
+images/camera_1/*
+images/camera_2/*
+images/camera_3/*
+images/camera_4/*
+images/camera_5/*
+images/camera_6/*
+
