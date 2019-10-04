@@ -49,9 +49,8 @@ class ThermalDataModifier:
         loaded_csv_files = glob.glob('*{}'.format(unmodified_data_suffix))
 
         if loaded_csv_files.__len__() != 1:
-            print('Multiple csv files found inside the folder:')
+            print('Multiple or no themal values csv files found inside the folder:')
             print(loaded_csv_files)
-            print('Please delete the files that are not needed and try again')
             exit()
 
         if self.is_debug:
@@ -162,8 +161,24 @@ class ThermalDataModifier:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Modifies the thermal data and generates metrics')
-    parser.add_argument('-dir', '--directory', type=str, help='Path to directory. Ex. images/test2/', required=True)
+    parser.add_argument('-dir', '--directory', type=str, help='Path to directory. Ex. images/test2/', required=False)
+    parser.add_argument('-act', '--actions', help='Performs the action for all images inside folders with .csv and mask.txt files',required=False,  action='store_true')
     parser.add_argument('-d', '--debug', help='Set the debug flag', required=False, action='store_true')
     parsed_args = parser.parse_args()
-    tdm = ThermalDataModifier(is_debug=parsed_args.debug, directory=parsed_args.directory)
-    tdm.process_thermal_data()
+    
+    if parsed_args.actions:
+        if parsed_args.debug:
+            print("DEBUG All actions will be performed for the following folders:")
+        folder_path_list = glob.glob("images/camera_*/*/")
+
+        for folder_path in folder_path_list:
+
+            if parsed_args.debug:
+                print (folder_path)
+            tdm = ThermalDataModifier(is_debug=parsed_args.debug, directory=folder_path)
+            tdm.process_thermal_data()
+    else:
+        tdm = ThermalDataModifier(is_debug=parsed_args.debug, directory=parsed_args.directory)
+        tdm.process_thermal_data()
+    
+    
