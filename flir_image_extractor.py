@@ -21,6 +21,7 @@ from itertools import zip_longest
 
 import numpy as np
 import cv2 as cv
+import pandas as pd
 
 
 class FlirImageExtractor:
@@ -28,6 +29,8 @@ class FlirImageExtractor:
     def __init__(self, exiftool_path="exiftool", is_debug=False):
         self.exiftool_path = exiftool_path
         self.is_debug = is_debug
+        self.is_debug_number_of_images = 0
+        self.is_debug_number_of_images_with_metadata = 0
         self.flir_img_filename = ""
         self.subfolder_name = ""
         self.image_suffix = "_rgb_image.jpg"
@@ -36,8 +39,7 @@ class FlirImageExtractor:
         self.cropped_image_suffix = "_rgb_image_cropped.jpg"
         self.thermal_suffix = "_thermal.png"
         self.csv_suffix = "_thermal_values.csv"
-        self.default_distance = 1.0
-
+        
         # valid for PNG thermal images
         self.use_thumbnail = False
         self.fix_endian = True
@@ -45,6 +47,13 @@ class FlirImageExtractor:
         self.rgb_image_np = None
         self.downscaled_rgb_image_np = None
         self.thermal_image_np = None
+        self.weather_df = None
+        self.emissivity = 0.98
+        self.rt = 30.00
+        self.default_distance = 15.24
+        self.at = None
+        self.rh = None
+        self.metadata_in_file = False
 
     pass
 
@@ -134,31 +143,51 @@ class FlirImageExtractor:
 
         # raw values -> temperature
         subject_distance = self.default_distance
-        if 'SubjectDistance' in meta:
-            subject_distance = FlirImageExtractor.extract_float(meta['SubjectDistance'])
+        
+        # Distance is wrong in our metadata, uncomment lines below when it is fixed
+        #if 'SubjectDistance' in meta:
+            #subject_distance = FlirImageExtractor.extract_float(meta['SubjectDistance'])
 
         if self.fix_endian:
             # fix endianness, the bytes in the embedded png are in the wrong order
             thermal_np = np.vectorize(lambda x: (x >> 8) + ((x & 0x00ff) << 8))(thermal_np)
 
-        raw2tempfunc = np.vectorize(lambda x: FlirImageExtractor.raw2temp(x, E=meta['Emissivity'], OD=subject_distance,
-                                                                          RTemp=FlirImageExtractor.extract_float(
-                                                                              meta['ReflectedApparentTemperature']),
-                                                                          ATemp=FlirImageExtractor.extract_float(
-                                                                              meta['AtmosphericTemperature']),
-                                                                          IRWTemp=FlirImageExtractor.extract_float(
-                                                                              meta['IRWindowTemperature']),
-                                                                          IRT=meta['IRWindowTransmission'],
-                                                                          RH=FlirImageExtractor.extract_float(
-                                                                              meta['RelativeHumidity']),
-                                                                          PR1=meta['PlanckR1'], PB=meta['PlanckB'],
-                                                                          PF=meta['PlanckF'],
-                                                                          PO=meta['PlanckO'], PR2=meta['PlanckR2']))
+        # Check if the image is present in the xlsx data
+        if self.metadata_in_file:
+            # Use the metadata found in file
+            raw2tempfunc = np.vectorize(lambda x: FlirImageExtractor.raw2temp(x, 
+                                                                    E=self.emissivity, OD=subject_distance,
+                                                                    RTemp=self.rt,
+                                                                    ATemp=self.at,
+                                                                    IRWTemp=FlirImageExtractor.extract_float(
+                                                                        meta['IRWindowTemperature']),
+                                                                    IRT=meta['IRWindowTransmission'],
+                                                                    RH=self.rh,
+                                                                    PR1=meta['PlanckR1'], PB=meta['PlanckB'],
+                                                                    PF=meta['PlanckF'],
+                                                                    PO=meta['PlanckO'], PR2=meta['PlanckR2']))
+        
+        else:
+            # Use the metadata attached to the image
+            raw2tempfunc = np.vectorize(lambda x: FlirImageExtractor.raw2temp(x, 
+                                                                    E=meta['Emissivity'],               OD=subject_distance,
+                                                                    RTemp=FlirImageExtractor.extract_float(
+                                                                        meta['ReflectedApparentTemperature']),
+                                                                    ATemp=FlirImageExtractor.extract_float(
+                                                                        meta['AtmosphericTemperature']),
+                                                                    IRWTemp=FlirImageExtractor.extract_float(
+                                                                        meta['IRWindowTemperature']),
+                                                                    IRT=meta['IRWindowTransmission'],
+                                                                    RH=FlirImageExtractor.extract_float(
+                                                                        meta['RelativeHumidity']),
+                                                                    PR1=meta['PlanckR1'], PB=meta['PlanckB'],
+                                                                    PF=meta['PlanckF'],
+                                                                    PO=meta['PlanckO'], PR2=meta['PlanckR2']))
         thermal_np = raw2tempfunc(thermal_np)
         return thermal_np
 
     @staticmethod
-    def raw2temp(raw, E=1, OD=1, RTemp=20, ATemp=20, IRWTemp=20, IRT=1, RH=50, PR1=21106.77, PB=1501, PF=1, PO=-7340,
+    def raw2temp(raw, E=0.98, OD=15.24, RTemp=30, ATemp=20, IRWTemp=20, IRT=1, RH=50, PR1=21106.77, PB=1501, PF=1, PO=-7340,
                  PR2=0.012545258):
         """
         convert raw values from the flir sensor to temperatures in C
@@ -240,8 +269,8 @@ class FlirImageExtractor:
 
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
         
-        thermal_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[2] + self.thermal_suffix)
-        image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[2] + self.image_suffix)
+        thermal_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[3] + self.thermal_suffix)
+        image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[3] + self.image_suffix)
         
         if self.use_thumbnail:
             image_filename = fn_prefix + self.thumbnail_suffix
@@ -261,7 +290,7 @@ class FlirImageExtractor:
         """
         
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
-        path = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[2] + self.csv_suffix)
+        path = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[3] + self.csv_suffix)
 
 
         # list of pixel coordinates and thermal values
@@ -325,8 +354,8 @@ class FlirImageExtractor:
         resized = cv.resize(cropped_img, dim, interpolation=cv.INTER_AREA)
 
         fn_prefix, _ = os.path.splitext(self.flir_img_filename)
-        downscaled_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[2] + self.downscaled_image_suffix)
-        cropped_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[2] + self.cropped_image_suffix)
+        downscaled_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[3] + self.downscaled_image_suffix)
+        cropped_image_filename = os.path.join(fn_prefix + '/' + fn_prefix.split('/')[3] + self.cropped_image_suffix)
 
         downscaled_img_visual = Image.fromarray(resized)
         self.downscaled_rgb_image_np = np.array(downscaled_img_visual)
@@ -337,11 +366,11 @@ class FlirImageExtractor:
         cropped_img_visual.save(cropped_image_filename)
         
         if self.is_debug:
-            print('DEBUG Original Dimensions : ', self.rgb_image_np.shape)
-            print('DEBUG Removed black surrounding box')
-            print('DEBUG Cropped RGB image dimensions: ', cropped_img.shape)
-            print('DEBUG Downscaled RGB image dimensions : ', resized.shape)
-            print("DEBUG Saving downscaled RGB image to:{}".format(downscaled_image_filename))
+            #print('DEBUG Original Dimensions : ', self.rgb_image_np.shape)
+            #print('DEBUG Removed black surrounding box')
+            #print('DEBUG Cropped RGB image dimensions: ', cropped_img.shape)
+            #print('DEBUG Downscaled RGB image dimensions : ', resized.shape)
+            #print("DEBUG Saving downscaled RGB image to:{}".format(downscaled_image_filename))
             print("DEBUG Saving cropped 494x335 RGB image to:{}".format(cropped_image_filename))
 
     def create_subfolder(self):
@@ -364,14 +393,58 @@ class FlirImageExtractor:
                 print("DEBUG Successfully created the directory %s " % path)
 
         return path
+    
+    def parse_weather_data(self):
+        file_name = 'images/weather_data.xlsx'
+        xl_file = pd.ExcelFile(file_name)
+        dfs = pd.read_excel(file_name, header=None, skiprows=1, keep_default_na=False)
+        
+        # Dataframe keys
+        dfs.columns = ['DateTime_1', 'Temp_1', 'RH_1', 'DateTime_2', 'Temp_2', 'RH_2', 'DateTime_3',
+                       'Temp_3', 'RH_3']
+        
+        self.weather_df = dfs
+        #print(self.weather_df)
+
+    def check_if_metadata_present(self, file_name):
+        self.metadata_in_file = False
+        img_name = os.path.split(file_name)[1]
+        img_time = img_name.split("_")[2]
+        
+        # Date modification so that we get an exact match
+        joined_date = ''.join(file_name.split("/")[1] + " " + img_time[:2] + ":15:00" )
+     
+        for i, j in self.weather_df.iterrows():
+            if str(j[0]) == joined_date:
+                self.metadata_in_file = True
+                self.at = FlirImageExtractor.extract_float(str(j[1]))
+                self.rh = FlirImageExtractor.extract_float(str(j[2]))
+            elif str(j[3]) == joined_date:
+                self.metadata_in_file = True
+                self.at = FlirImageExtractor.extract_float(str(j[4]))
+                self.rh = FlirImageExtractor.extract_float(str(j[5]))
+            elif str(j[6]) == joined_date:
+                self.metadata_in_file = True
+                self.at = FlirImageExtractor.extract_float(str(j[7]))
+                self.rh = FlirImageExtractor.extract_float(str(j[8]))
+        
+        if self.metadata_in_file:
+            self.is_debug_number_of_images_with_metadata+=1
+        else:
+            print("Weather data not found for: ", file_name)
+
+class SmartFormatter(argparse.HelpFormatter):
 
 
-class SmartFormatter(argparse.HelpFormatter):
-
-    def _split_lines(self, text, width):
-        if text.startswith('R|'):
-            return text[2:].splitlines()  
-        # this is the RawTextHelpFormatter._split_lines
+
+    def _split_lines(self, text, width):
+
+        if text.startswith('R|'):
+
+            return text[2:].splitlines()  
+
+        # this is the RawTextHelpFormatter._split_lines
+
         return argparse.HelpFormatter._split_lines(self, text, width)
 
 
@@ -401,15 +474,23 @@ if __name__ == '__main__':
     if args.actions:
         if args.debug:
             print("DEBUG All actions will be performed for the following images:")
-        image_path_list = glob.glob("images/camera_*/*.jpg")
-        for image_path in image_path_list:
+        image_path_list = glob.glob("images/*-*-*/Camera_*/*.jpg")
+   
+        fie.parse_weather_data()
+        
+        for image_path in image_path_list:
             if args.debug:
                 print (image_path)
+            fie.check_if_metadata_present(image_path)
             fie.process_image(image_path)
             fie.create_subfolder()
             fie.image_downscale()
             fie.export_data_to_csv()
             fie.save_images()
+        
+        print("Total number of images: ",len(image_path_list))
+        print("Total number of images with metadata present in the xlsx : ",fie.is_debug_number_of_images_with_metadata)
+        
     else:
         fie.process_image(args.input)
         fie.create_subfolder()

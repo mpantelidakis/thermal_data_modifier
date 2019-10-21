@@ -44,9 +44,8 @@ class ThermalDataModifier:
             print("Mask not found! Please add a mask.txt file to the following folder: "+ self.directory)
             exit()
 
-        os.chdir(self.directory)
         unmodified_data_suffix = '_thermal_values.csv'
-        loaded_csv_files = glob.glob('*{}'.format(unmodified_data_suffix))
+        loaded_csv_files = glob.glob(self.directory + '*{}'.format(unmodified_data_suffix))
 
         if loaded_csv_files.__len__() != 1:
             print('Multiple or no themal values csv files found inside the folder: ' + self.directory)
@@ -90,10 +89,8 @@ class ThermalDataModifier:
                 writer.writerows(all)
 
         if self.is_debug:
-            print('')
             print('DEBUG csv modified')
             print('DEBUG The file now also contains information regarding which pixels correspond to leaves')
-            print('')
 
         with open(loaded_csv_files[0], 'r') as csvInput:
             reader = csv.reader(csvInput)
@@ -151,7 +148,7 @@ class ThermalDataModifier:
             metrics = [average_image_temp, average_leaf_temp, average_noise_temp, diff, highest_leaf_temp,
                        lowest_leaf_temp, highest_noise_temp, lowest_noise_temp]
 
-            with open('output.csv', 'w') as csvOutput:
+            with open(os.path.join(self.directory,'output.csv'), 'w') as csvOutput:
                 writer = csv.writer(csvOutput, lineterminator='\n')
 
                 all = []
@@ -171,7 +168,7 @@ if __name__ == "__main__":
     if parsed_args.actions:
         if parsed_args.debug:
             print("DEBUG All actions will be performed for the following folders:")
-        folder_path_list = glob.glob("images/camera_*/*/")
+        folder_path_list = glob.glob("images/*-*-*/Camera_*/*/")
 
         for folder_path in folder_path_list:
 
