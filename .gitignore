@@ -125,4 +125,6 @@ dmypy.json
 .pyre/
 
 images/*
+Visual_Spectrum_images/*
+project_venv/*
 
